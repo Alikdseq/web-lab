@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import './App.css';
+import React, { useState, useEffect } from "react";
+import "./App.css";
+import { getWeatherByCoords, isTodayDayOff } from "./api";
 import ToDoForm from "./AddTask";
 import ToDo from "./Task";
-import axios from 'axios';
+import axios from "axios";
 
-const TASKS_STORAGE_KEY = 'tasks-list-project-web';
-const weatherApiKey = 'c7616da4b68205c2f3ae73df2c31d177';
+const TASKS_STORAGE_KEY = "tasks-list-project-web";
 
 function App() {
-  const [rates, setRates] = useState({});
   const [weatherData, setWeatherData] = useState(null);
+  const [isDayOff, setIsDayOff] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [todos, setTodos] = useState([]);
 
   useEffect(() => {
@@ -23,7 +23,7 @@ function App() {
           setTodos(parsedTasks);
         }
       } catch (error) {
-        console.error('Ошибка при чтении задач:', error);
+        console.error("Ошибка при чтении задач:", error);
       }
     }
   }, []);
@@ -33,31 +33,30 @@ function App() {
   }, [todos]);
 
   useEffect(() => {
-    async function fetchAllData() {
+    async function fetchData() {
       try {
-        const currencyResponse = await axios.get('https://www.cbr-xml-daily.ru/daily_json.js');
-        if (!currencyResponse.data?.Valute) throw new Error('Нет данных о валюте');
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          const { latitude, longitude } = position.coords;
 
-        const USDrate = currencyResponse.data.Valute.USD.Value.toFixed(4).replace('.', ',');
-        const EURrate = currencyResponse.data.Valute.EUR.Value.toFixed(4).replace('.', ',');
-        setRates({ USDrate, EURrate });
+          const weather = await getWeatherByCoords(latitude, longitude);
+          setWeatherData({
+            temperature: weather.temperature, // °C
+            windSpeed: weather.windSpeed,
+            clouds: weather.clouds,
+          });
 
-        navigator.geolocation.getCurrentPosition(async position => {
-          const { latitude: lat, longitude: lon } = position.coords;
-          const weatherResponse = await axios.get(
-            `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${weatherApiKey}`
-          );
-          if (!weatherResponse.data?.main) throw new Error('Нет данных о погоде');
-          setWeatherData(weatherResponse.data);
+          const isOff = await isTodayDayOff();
+          setIsDayOff(isOff);
         });
       } catch (err) {
-        console.error(err);
-        setError('Ошибка загрузки данных');
+        console.error("Ошибка при загрузке:", err);
+        setError("Ошибка загрузки данных");
       } finally {
         setLoading(false);
       }
     }
-    fetchAllData();
+
+    fetchData();
   }, []);
 
   const addTask = (userInput) => {
@@ -65,19 +64,19 @@ function App() {
       const newItem = {
         id: Math.random().toString(36).substr(2, 9),
         task: userInput,
-        complete: false
+        complete: false,
       };
       setTodos([...todos, newItem]);
     }
   };
 
   const removeTask = (id) => {
-    setTodos([...todos.filter(todo => todo.id !== id)]);
+    setTodos([...todos.filter((todo) => todo.id !== id)]);
   };
 
   const handleToggle = (id) => {
     setTodos(
-      todos.map(task =>
+      todos.map((task) =>
         task.id === id ? { ...task, complete: !task.complete } : task
       )
     );
@@ -86,40 +85,32 @@ function App() {
   return (
     <div className="App">
       {loading && <p>Загрузка...</p>}
-      {!loading && error && <p style={{ color: 'red' }}>{error}</p>}
+      {!loading && error && <p style={{ color: "red" }}>{error}</p>}
 
       {!loading && !error && (
-        <div className='info'>
-          <div className='money'>
-            <div id="USD">Доллар США $ --- {rates.USDrate} руб.</div>
-            <div id="EUR">Евро € --- {rates.EURrate} руб.</div>
-          </div>
-
+        <div className="info">
           {weatherData && (
             <div className="weather-info">
-              <div>
-                Погода сегодня: <br />
-                🌡️ {(weatherData.main.temp - 273.15).toFixed(1)}°C &nbsp;
-                🍃 {weatherData.wind.speed} м/с &nbsp;
-                ☁️ {weatherData.clouds.all}%
-              </div>
-              <img
-                className='weather-icon'
-                src={`http://openweathermap.org/img/w/${weatherData.weather[0].icon}.png`}
-                alt="Иконка погоды"
-              />
+              Погода сегодня: <br />
+              🌡️ {weatherData.temperature}°C &nbsp; 🍃 {weatherData.windSpeed}{" "}
+              м/с &nbsp; ☁️ {weatherData.clouds ?? "-"}%
+            </div>
+          )}
+
+          {isDayOff !== null && (
+            <div className="dayoff-info">
+              Сегодня: {isDayOff ? "выходной день 🎉" : "рабочий день 💼"}
             </div>
           )}
         </div>
       )}
-
       <header>
-        <h1 className='list-header'>Список задач: {todos.length}</h1>
+        <h1 className="list-header">Список задач: {todos.length}</h1>
       </header>
 
       <ToDoForm addTask={addTask} />
 
-      {todos.map(todo => (
+      {todos.map((todo) => (
         <ToDo
           key={todo.id}
           todo={todo}
